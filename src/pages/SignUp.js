@@ -2,13 +2,14 @@ import { useRef, useState, useEffect } from "react";
 import { faCheck, faTimes, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { Link } from "react-router-dom";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth } from './firebase';
+import { createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from '../firebase'
+import Loading from "../components/Loading";
 
-const USER_REGEX = /^(([^<>()[\]\.,;:\s@\"]+(\.[^<>()[\]\.,;:\s@\"]+)*)|(\".+\"))@(([^<>()[\]\.,;:\s@\"]+\.)+[^<>()[\]\.,;:\s@\"]{2,})$/i;
+const USER_REGEX =  /^(([^<>()[\]\\.,;:\s@\\"]+(\.[^<>()[\]\\.,;:\s@\\"]+)*)|(\\".+\\"))@(([^<>()[\]\\.,;:\s@\\"]+\.)+[^<>()[\]\\.,;:\s@\\"]{2,})$/i;
 const PWD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%]).{8,24}$/;
 
-const SignIn = () => {
+const SignUp = () => {
     const userRef = useRef();
     const errRef = useRef();
 
@@ -20,12 +21,32 @@ const SignIn = () => {
     const [validPwd, setValidPwd] = useState(false);
     const [pwdFocus, setPwdFocus] = useState(false);
 
+    const [matchPwd, setMatchPwd] = useState('');
+    const [validMatch, setValidMatch] = useState(false);
+    const [matchFocus, setMatchFocus] = useState(false);
+
     const [errMsg, setErrMsg] = useState('');
     const [authUser, setAuthUser] = useState(null);
+    const [isLoading, setISLoading] = useState(true);
 
     useEffect(() => {
-        userRef.current.focus();
-    }, [])
+        userRef.current && userRef.current.focus();
+        
+        const lessen = onAuthStateChanged(auth, (userAuth) => {
+            if(userAuth) {
+                setAuthUser(userAuth);
+                setISLoading(false);
+            } else {
+                setAuthUser(null);
+                setISLoading(false);
+                userRef.current && userRef.current.focus();
+            }
+        });
+
+        return () => {
+            lessen();
+        };
+    }, []);
 
     useEffect(() => {
         setValidName(USER_REGEX.test(user));
@@ -33,31 +54,34 @@ const SignIn = () => {
 
     useEffect(() => {
         setValidPwd(PWD_REGEX.test(pwd));
-    }, [pwd])
+        setValidMatch(pwd === matchPwd);
+    }, [pwd, matchPwd])
 
     useEffect(() => {
         setErrMsg('');
-    }, [user, pwd])
+    }, [user, pwd, matchPwd])
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
+        
+        setISLoading(true);
+        // if button enabled with JS hack
         const v1 = USER_REGEX.test(user);
         const v2 = PWD_REGEX.test(pwd);
         if (!v1 || !v2) {
             setErrMsg("Invalid Entry");
             return;
         }
-        signInWithEmailAndPassword(auth, user, pwd).then((userCredential) => {
-            console.log(userCredential)
-            setAuthUser(true)
-            setUser('')
+        createUserWithEmailAndPassword(auth, user, pwd).then((userCredential) => {
+            console.log(userCredential);
+            setAuthUser(true);
+            setUser('');
             setPwd('');
+            setMatchPwd('');
+            setISLoading(false);
         }).catch((error) => {
-            console.log(error)
+            console.log(error);
         })
-        console.log(user)
-        console.log(pwd)
     }
     const userSignOut = () => {
         signOut(auth).then(() => {
@@ -75,10 +99,10 @@ const SignIn = () => {
                         <button onClick={userSignOut}> sign out</button>
                     </p>
                 </section>
-            ) : (
+            ) : isLoading ? <Loading /> : (
                 <section className="Registration">
                     <p ref={errRef} className={errMsg ? "errmsg" : "offscreen"} aria-live="assertive">{errMsg}</p>
-                    <h1>Sing in</h1>
+                    <h1>Register</h1>
                     <form onSubmit={handleSubmit}>
                         <label htmlFor="email">
                             Email:
@@ -98,7 +122,7 @@ const SignIn = () => {
                             onFocus={() => setUserFocus(true)}
                             onBlur={() => setUserFocus(false)}
                         />
-                        <p id="uidnote" className={userFocus && user && !validName ? "instructions" : "offscreen"}>
+                        <p id="uidnote" className={userFocus && !validName ? "instructions" : "offscreen"}>
                             <FontAwesomeIcon icon={faInfoCircle} />
                             The local part (before the '@' symbol) can contain letters, numbers, periods, and certain special characters.<br />
                             It may also include a quoted string enclosed in double quotes.<br />
@@ -129,12 +153,35 @@ const SignIn = () => {
                             Allowed special characters: <span aria-label="exclamation mark">!</span> <span aria-label="at symbol">@</span> <span aria-label="hashtag">#</span> <span aria-label="dollar sign">$</span> <span aria-label="percent">%</span>
                         </p>
 
-                        <button disabled={!validName || !validPwd ? true : false}>Sign in</button>
+
+                        <label htmlFor="confirm_pwd">
+                            Confirm Password:
+                            <FontAwesomeIcon icon={faCheck} className={validMatch && matchPwd ? "valid" : "hide"} />
+                            <FontAwesomeIcon icon={faTimes} className={validMatch || !matchPwd ? "hide" : "invalid"} />
+                        </label>
+                        <input
+                            type="password"
+                            id="confirm_pwd"
+                            onChange={(e) => setMatchPwd(e.target.value)}
+                            value={matchPwd}
+                            required
+                            aria-invalid={validMatch ? "false" : "true"}
+                            aria-describedby="confirmnote"
+                            onFocus={() => setMatchFocus(true)}
+                            onBlur={() => setMatchFocus(false)}
+                        />
+                        <p id="confirmnote" className={matchFocus && !validMatch ? "instructions" : "offscreen"}>
+                            <FontAwesomeIcon icon={faInfoCircle} />
+                            Must match the first password input field.
+                        </p>
+
+                        <button disabled={!validName || !validPwd || !validMatch ? true : false}>Sign Up</button>
                     </form>
                     <p>
-                        Not registered befor?<br />
+                        Already registered?<br />
                         <span className="line">
-                            <Link to='/signup'>Sign Up</Link>
+                            {/*put router link here*/}
+                            <Link to='/signin'>Sign In</Link>
                         </span>
                     </p>
                 </section>
@@ -143,4 +190,4 @@ const SignIn = () => {
     )
 }
 
-export default SignIn
+export default SignUp

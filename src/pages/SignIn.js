@@ -1,14 +1,16 @@
 import { useRef, useState, useEffect } from "react";
 import { faCheck, faTimes, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { Link } from "react-router-dom";
-import { createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from './firebase'
+import { Link, useNavigate } from "react-router-dom";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth } from '../firebase';
+import Loading from "../components/Loading";
 
-const USER_REGEX =  /^(([^<>()[\]\.,;:\s@\"]+(\.[^<>()[\]\.,;:\s@\"]+)*)|(\".+\"))@(([^<>()[\]\.,;:\s@\"]+\.)+[^<>()[\]\.,;:\s@\"]{2,})$/i;
+const USER_REGEX = /^(([^<>()[\]\\.,;:\s@\\"]+(\.[^<>()[\]\\.,;:\s@\\"]+)*)|(\\".+\\"))@(([^<>()[\]\\.,;:\s@\\"]+\.)+[^<>()[\]\\.,;:\s@\\"]{2,})$/i;
 const PWD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%]).{8,24}$/;
 
-const SignUp = () => {
+const SignIn = () => {
+    const navigate = useNavigate();
     const userRef = useRef();
     const errRef = useRef();
 
@@ -20,26 +22,29 @@ const SignUp = () => {
     const [validPwd, setValidPwd] = useState(false);
     const [pwdFocus, setPwdFocus] = useState(false);
 
-    const [matchPwd, setMatchPwd] = useState('');
-    const [validMatch, setValidMatch] = useState(false);
-    const [matchFocus, setMatchFocus] = useState(false);
-
     const [errMsg, setErrMsg] = useState('');
     const [authUser, setAuthUser] = useState(null);
+    const [isLoading, setISLoading] = useState(true);
 
     useEffect(() => {
-        userRef.current.focus();
+        userRef.current && userRef.current.focus();
+        
         const lessen = onAuthStateChanged(auth, (userAuth) => {
             if(userAuth) {
                 setAuthUser(userAuth);
-            }else {
-                setAuthUser(null)
+                navigate('/')
+                setISLoading(false);
+            } else {
+                setAuthUser(null);
+                setISLoading(false);
+                userRef.current && userRef.current.focus();
             }
-        })
-        return () =>{
+        });
+
+        return () => {
             lessen();
-        }
-    }, [])
+        };
+    }, []);
 
     useEffect(() => {
         setValidName(USER_REGEX.test(user));
@@ -47,31 +52,34 @@ const SignUp = () => {
 
     useEffect(() => {
         setValidPwd(PWD_REGEX.test(pwd));
-        setValidMatch(pwd === matchPwd);
-    }, [pwd, matchPwd])
+    }, [pwd])
 
     useEffect(() => {
         setErrMsg('');
-    }, [user, pwd, matchPwd])
+    }, [user, pwd])
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // if button enabled with JS hack
+        
+        setISLoading(true);
+
         const v1 = USER_REGEX.test(user);
         const v2 = PWD_REGEX.test(pwd);
         if (!v1 || !v2) {
             setErrMsg("Invalid Entry");
             return;
         }
-        createUserWithEmailAndPassword(auth, user, pwd).then((userCredential) => {
-            console.log(userCredential);
-            setAuthUser(true);
-            setUser('');
+        signInWithEmailAndPassword(auth, user, pwd).then((userCredential) => {
+            console.log(userCredential)
+            setAuthUser(true)
+            setUser('')
             setPwd('');
-            setMatchPwd('');
+            setISLoading(false);
         }).catch((error) => {
-            console.log(error);
+            console.log(error)
         })
+        console.log(user)
+        console.log(pwd)
     }
     const userSignOut = () => {
         signOut(auth).then(() => {
@@ -89,10 +97,10 @@ const SignUp = () => {
                         <button onClick={userSignOut}> sign out</button>
                     </p>
                 </section>
-            ) : (
+            ) : isLoading ? <Loading /> : (
                 <section className="Registration">
                     <p ref={errRef} className={errMsg ? "errmsg" : "offscreen"} aria-live="assertive">{errMsg}</p>
-                    <h1>Register</h1>
+                    <h1>Sing in</h1>
                     <form onSubmit={handleSubmit}>
                         <label htmlFor="email">
                             Email:
@@ -112,7 +120,7 @@ const SignUp = () => {
                             onFocus={() => setUserFocus(true)}
                             onBlur={() => setUserFocus(false)}
                         />
-                        <p id="uidnote" className={userFocus && !validName ? "instructions" : "offscreen"}>
+                        <p id="uidnote" className={userFocus && user && !validName ? "instructions" : "offscreen"}>
                             <FontAwesomeIcon icon={faInfoCircle} />
                             The local part (before the '@' symbol) can contain letters, numbers, periods, and certain special characters.<br />
                             It may also include a quoted string enclosed in double quotes.<br />
@@ -143,35 +151,12 @@ const SignUp = () => {
                             Allowed special characters: <span aria-label="exclamation mark">!</span> <span aria-label="at symbol">@</span> <span aria-label="hashtag">#</span> <span aria-label="dollar sign">$</span> <span aria-label="percent">%</span>
                         </p>
 
-
-                        <label htmlFor="confirm_pwd">
-                            Confirm Password:
-                            <FontAwesomeIcon icon={faCheck} className={validMatch && matchPwd ? "valid" : "hide"} />
-                            <FontAwesomeIcon icon={faTimes} className={validMatch || !matchPwd ? "hide" : "invalid"} />
-                        </label>
-                        <input
-                            type="password"
-                            id="confirm_pwd"
-                            onChange={(e) => setMatchPwd(e.target.value)}
-                            value={matchPwd}
-                            required
-                            aria-invalid={validMatch ? "false" : "true"}
-                            aria-describedby="confirmnote"
-                            onFocus={() => setMatchFocus(true)}
-                            onBlur={() => setMatchFocus(false)}
-                        />
-                        <p id="confirmnote" className={matchFocus && !validMatch ? "instructions" : "offscreen"}>
-                            <FontAwesomeIcon icon={faInfoCircle} />
-                            Must match the first password input field.
-                        </p>
-
-                        <button disabled={!validName || !validPwd || !validMatch ? true : false}>Sign Up</button>
+                        <button disabled={!validName || !validPwd ? true : false}>Sign in</button>
                     </form>
                     <p>
-                        Already registered?<br />
+                        Not registered befor?<br />
                         <span className="line">
-                            {/*put router link here*/}
-                            <Link to='/signin'>Sign In</Link>
+                            <Link to='/signup'>Sign Up</Link>
                         </span>
                     </p>
                 </section>
@@ -180,4 +165,4 @@ const SignUp = () => {
     )
 }
 
-export default SignUp
+export default SignIn
